@@ -215,10 +215,11 @@ Let $y_i$ represent the proportion of land covered by *Hesperostipa comata* ssp.
 
 
 $$
-y_{i} \sim {\sf beta} \bigl( \alpha, \beta\bigr)
+y \sim {\sf beta} \bigl( \alpha, \beta\bigr)
 $$
 
-with a mean ($\mu$) function of:
+deterministic model of $\mu$:
+
 $$
 \mu_{i} = g(\beta_0, \beta_1, \cdots, \beta_4,x_i) = \textrm{inverse logit} \bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_4 x_{4i} \bigr) = \frac{\exp{\bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_4 x_{4i} \bigr)}}{1 + \exp \bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_4 x_{4i} \bigr)}
 $$
@@ -228,6 +229,7 @@ $$
 Write the likelihood for an observation, $y_i$.
 
 The likelihood function for $y_i$ is:
+
 $$
 y_{i} \sim {\sf beta} \bigl( a_i, b_i \bigr)
 $$
@@ -265,5 +267,68 @@ b_i = \frac{\mu_i - 2\mu_i^2 + \mu_i^3 - \sigma^2 + \mu_i\sigma^2}{\sigma^2} \\
 \end{aligned}
 $$
 
+## Question 6
 
-asdf
+Write the JAGS code for the model. Fit the model to the data with predictor variables standardized. Do a posterior predictive check for the mean and the standard deviation. Interpret the coefficients. Which covariate has the greatest effect?
+
+### JAGS Model
+
+```{r, eval=FALSE}
+# define explanatory variables
+exp_vars <- c("slope", "aspect", "slope_position", "rel_moisture")
+# list of data
+data = list(
+  n = nrow(coverage) # n is required in the JAGS program to index the for structure
+  , y = as.double(coverage$coverage)
+  , x_mtrx = as.matrix(
+        coverage %>% 
+          dplyr::mutate(dplyr::across(exp_vars, scale)) %>% 
+          dplyr::mutate(intercept = 1) %>% 
+          dplyr::select(c("intercept", exp_vars)) %>% 
+          #the execution of JAGS is about 5 times faster on double precision than on integers.
+          dplyr::mutate_if(is.numeric, as.double)
+      )
+)
+
+## JAGS Model
+model{
+  # priors
+  sigma ~ dunif(0, 1)
+  b0 ~ dnorm(0, (1/2.7))
+  b1 ~ dnorm(0, (1/2.7))
+  b2 ~ dnorm(0, (1/2.7))
+  b3 ~ dnorm(0, (1/2.7))
+  b4 ~ dnorm(0, (1/2.7))
+  # likelihood
+  for (i in 1:n) {
+    # deterministic model
+    mu[i] <- ilogit(
+       b0
+       + b1*x_mtrx[i,2] # or b1*x_mtrx[i,"slope"]
+       + b2*x_mtrx[i,3] # or b2*x_mtrx[i,"aspect"]
+       + b3*x_mtrx[i,4]
+       + b4*x_mtrx[i,5]
+    )
+    # likelihood parameters
+    a[i] <- (mu[i]^2 - mu[i]^3 - mu[i]*sigma^2) / sigma^2
+    b[i] <- (mu[i] - 2*mu[i]^2 + mu[i]^3 - sigma^2 + mu[i]*sigma^2) / sigma^2
+    # likelihood
+    y[i] ~ dbeta(a[i], b[i])
+    y.sim[i]  ~ dbeta(a[i], b[i])
+  }
+  #posterior predictive checks
+  mean.y = mean(y)
+  sd.y = sd(y)
+  mean.y.sim = mean(y.sim)
+  sd.y.sim = sd(y.sim)
+  p.mean = stats::step(mean.y.sim - mean.y)
+  p.sd = stats::step(sd.y.sim - sd.y)
+}
+```
+
+### Implement JAGS Model
+
+```{r}
+# in progress
+```
+
