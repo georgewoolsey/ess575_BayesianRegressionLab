@@ -1,1 +1,1 @@
-# ess575_BayesianRegressionLab
+# ess575_JAGSProblemsLab
