@@ -79,7 +79,6 @@ remove(list = ls()[grep("_pth",ls())])
 gc()
 ```
 
-
 # Problem A.
 
 Hein et. al (2012) investigated how environmental conditions influence coexistence between Arctic char (*Salmo trutta*) and pike (*Esox lucius*) in Swedish lakes. Pike were introduced to 151 lakes containing brown trout. Coexistence of the two species was recorded, as $yi = 1$ if both species were found in lake $i$ and 0 otherwise. For each lake, five environmental conditions deemed relevant to coexistence patterns were observed:
@@ -125,8 +124,146 @@ $$
 
 Assume we know very little about the impact of the environmental covariates on coexistence. Specify appropriate prior distributions for all unknown parameters. Explain your choice of priors.
 
-Assuming vague priors on the intercept and slope we will set the variance $\sigma^2 = 2.7$ normally distributed with a mean of 0; e.g., $\beta_0 \sim {\sf normal}(0, 2.7), \; \beta_1 \sim {\sf normal}(0, 2.7),\cdots, \; \beta_1 \sim {\sf normal}(0, 2.7)$. Such that:
+Assuming vague priors on the intercept and slope can be accomplished by setting the variance $\sigma^2 = 2.7$ normally distributed with a mean of 0; e.g., $\beta_0 \sim {\sf normal}(0, 2.7), \; \beta_1 \sim {\sf normal}(0, 2.7),\cdots, \; \beta_1 \sim {\sf normal}(0, 2.7)$. Such that:
 
 $$
-\bigl[\beta_0, \beta_1, \cdots, \beta_5 \mid \textbf{y} \bigr] \propto \prod_{i = 1}^{n} {\sf Bernoulli} \bigl( y_{i} \mid g(\beta_0, \beta_1, \cdots, \beta_5, x_i) \bigr) \times{\sf normal} \bigr(\beta_0 \mid 0, 2.7 \bigl) \times \cdots \times {\sf normal} \bigr(\beta_5 \mid 0, 2.7 \bigr)
+\bigl[\beta_0, \beta_1, \cdots, \beta_5 \mid \textbf{y} \bigr] \propto \prod_{i = 1}^{n} {\sf Bernoulli} \bigl( y_{i} \mid g(\beta_0, \beta_1, \cdots, \beta_5, x_i) \bigr) \times{\sf normal} \bigr(\beta_0 \mid 0, 2.7 \bigl) \times \bigr(\beta_1 \mid 0, 2.7 \bigl) \times \cdots \times {\sf normal} \bigr(\beta_5 \mid 0, 2.7 \bigr)
 $$
+
+## Question 4
+
+Write the expression for the posterior in terms of the joint distribution of the parameters and data.
+
+$$
+\bigl[\beta_0, \beta_1, \cdots, \beta_5 \mid \textbf{y} \bigr] \propto \prod_{i = 1}^{n} {\sf Bernoulli} \bigl( y_{i} \mid g(\beta_0, \beta_1, \cdots, \beta_5, x_i) \bigr) \times{\sf normal} \bigr(\beta_0 \mid 0, 2.7 \bigl) \times {\sf normal} \bigr(\beta_1 \mid 0, 2.7 \bigl) \times \cdots \times {\sf normal} \bigr(\beta_5 \mid 0, 2.7 \bigr)
+$$
+
+where:
+
+$$
+p_i = g(\beta_0, \beta_1, \beta_2, \beta_3, \beta_4, \beta_5,x_i) = \textrm{inverse logit} \bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_5 x_{5i} \bigr) = \frac{\exp{\bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_5 x_{5i} \bigr)}}{1 + \exp \bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_5 x_{5i} \bigr)}
+$$
+
+## Question 5
+
+Write out the JAGS code for the model.
+
+```{r, eval=FALSE}
+# define explanatory variables
+exp_vars <- c("elev", "catcharea", "lakearea", "maxdepth", "temp1")
+# list of data
+data = list(
+  n = nrow(coexist) # n is required in the JAGS program to index the for structure
+  , y = as.double(coexist$coexist)
+  , x_mtrx = as.matrix(
+        coexist %>% 
+          dplyr::mutate(intercept = 1) %>% 
+          dplyr::select(c("intercept", exp_vars)) %>% 
+          #the execution of JAGS is about 5 times faster on double precision than on integers.
+          dplyr::mutate_if(is.numeric, as.double)
+      )
+)
+
+## JAGS Model
+model{
+  # priors
+  b0 ~ dnorm(0, (1/2.7))
+  b1 ~ dnorm(0, (1/2.7))
+  b2 ~ dnorm(0, (1/2.7))
+  b3 ~ dnorm(0, (1/2.7))
+  b4 ~ dnorm(0, (1/2.7))
+  b5 ~ dnorm(0, (1/2.7))
+  # likelihood
+  for (i in 1:n) {
+    p[i] <- ilogit(
+       b0
+       + b1*x_mtrx[i,2] # or b1*x_mtrx[i,"elev"]
+       + b2*x_mtrx[i,3] # or b2*x_mtrx[i,"catcharea"]
+       + b3*x_mtrx[i,4]
+       + b4*x_mtrx[i,5]
+       + b5*x_mtrx[i,6]  
+    )
+    y[i] ~ dbern(p[i])
+  }
+}
+```
+
+# Problem B
+
+Kembel and Cahill Jr. (2011) collected data from temperate grassland plant communities in Alberta, Canada. Twenty-seven plots are established, and the slope, slope position, aspect, and relative moisture of each plot is recorded. For each plot, the abundance of several species is recorded, interpreted as the proportion of land area covered by the species. The land coverage by needle-and-thread grass (*Hesperostipa comata* ssp. *comata*) is considered here.
+
+## Question 1
+
+Plot the data using `pairs` or `GGally::ggpairs`. What do you notice? How might this impact your modeling choices?
+
+```{r}
+my_vars <- c("coverage", "slope", "aspect", "slope_position", "rel_moisture")
+# plot
+coverage %>% names
+GGally::ggpairs(
+  data = coverage
+  , columns = my_vars
+  , columnLabels = my_vars %>% stringr::str_replace_all("[[:punct:]]", " ") %>% stringr::str_to_title()
+) 
+```
+
+\textcolor{violet}{Slope position and relative moisture appear to be discrete data (not continuous). Slope should be costrainted to values between and including 0-180 while aspect should be constrained to values between and including 0-360. Coverage is a proportion and can take on any value between and including 0 and 1.}
+
+## Question 2
+
+Let $y_i$ represent the proportion of land covered by *Hesperostipa comata* ssp. *comata*. What deterministic model would you use to predict the mean of $y_i$ as a function of four covariates $x_1 \cdots x_4$?
+
+
+$$
+y_{i} \sim {\sf beta} \bigl( \alpha, \beta\bigr)
+$$
+
+with a mean ($\mu$) function of:
+$$
+\mu_{i} = g(\beta_0, \beta_1, \cdots, \beta_4,x_i) = \textrm{inverse logit} \bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_4 x_{4i} \bigr) = \frac{\exp{\bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_4 x_{4i} \bigr)}}{1 + \exp \bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_4 x_{4i} \bigr)}
+$$
+
+## Question 3
+
+Write the likelihood for an observation, $y_i$.
+
+The likelihood function for $y_i$ is:
+$$
+y_{i} \sim {\sf beta} \bigl( a_i, b_i \bigr)
+$$
+
+where:
+$$
+\begin{aligned}
+a_i = \frac{\mu_i^2 - \mu_i^3 - \mu_i\sigma^2}{\sigma^2} \\
+b_i = \frac{\mu_i - 2\mu_i^2 + \mu_i^3 - \sigma^2 + \mu_i\sigma^2}{\sigma^2} \\
+\end{aligned}
+$$
+
+## Question 4
+
+What would you use for vague priors on the coefficients to assure that the prior on $\mu_i$ is vague?
+
+Assuming vague priors on the intercept and slope can be accomplished by setting the variance $\sigma^2 = 2.7$ normally distributed with a mean of 0; e.g., $\beta_0 \sim {\sf normal}(0, 2.7), \; \beta_1 \sim {\sf normal}(0, 2.7),\cdots, \; \beta_1 \sim {\sf normal}(0, 2.7)$. Such that:
+
+$$
+\bigl[\beta_0, \beta_1, \cdots, \beta_4, \sigma^2 \mid \textbf{y} \bigr] \propto \prod_{i = 1}^{n} {\sf beta} \bigl( y_{i} \mid a_i, b_i \bigr) \times{\sf normal} \bigr(\beta_0 \mid 0, 2.7 \bigl) \times \cdots \times {\sf normal} \bigr(\beta_4 \mid 0, 2.7 \bigr)\times {\sf uniform}\bigr(\sigma \mid 0, 100 \bigl)
+$$
+
+## Question 5
+
+Express the posterior distribution as proportional to joint distribution for your model.
+
+
+$$
+\begin{aligned}
+y_{i} \sim {\sf beta} \bigl( a_i, b_i \bigr) \\
+a_i = \frac{\mu_i^2 - \mu_i^3 - \mu_i\sigma^2}{\sigma^2} \\
+b_i = \frac{\mu_i - 2\mu_i^2 + \mu_i^3 - \sigma^2 + \mu_i\sigma^2}{\sigma^2} \\
+\mu_{i} = g(\beta_0, \beta_1, , \cdots, \beta_4,x_i) = \textrm{inverse logit} \bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_4 x_{4i} \bigr) = \frac{\exp{\bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_4 x_{4i} \bigr)}}{1 + \exp \bigl(\beta_0 + \beta_1 x_{1i} + \cdots + \beta_4 x_{4i} \bigr)} \\
+\bigl[\beta_0, \beta_1, \cdots, \beta_4, \sigma^2 \mid \textbf{y} \bigr] \propto \prod_{i = 1}^{n} {\sf beta} \bigl( y_{i} \mid a_i, b_i \bigr) \times{\sf normal} \bigr(\beta_0 \mid 0, 2.7 \bigl)  \times \cdots \times {\sf normal} \bigr(\beta_4 \mid 0, 2.7 \bigr)\times {\sf uniform}\bigr(\sigma \mid 0, 100 \bigl)
+\end{aligned}
+$$
+
+
+asdf
