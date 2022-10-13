@@ -313,8 +313,11 @@ model{
     a[i] <- (mu[i]^2 - mu[i]^3 - mu[i]*sigma^2) / sigma^2
     b[i] <- (mu[i] - 2*mu[i]^2 + mu[i]^3 - sigma^2 + mu[i]*sigma^2) / sigma^2
     # likelihood
-    y[i] ~ dbeta(a[i], b[i])
-    y.sim[i]  ~ dbeta(a[i], b[i])
+      # returns density (for continuous) because l.h.s. is data (deterministic b/c defined in data) 
+      y[i] ~ dbeta(a[i], b[i]) 
+    # posterior predictive distribution of y.new (for model checking)
+      # returns random number generator because l.h.s. is not data (i.e. it is unknown "stochastic node")
+      y.sim[i]  ~ dbeta(a[i], b[i]) 
   }
   #posterior predictive checks
   mean.y = mean(y)
