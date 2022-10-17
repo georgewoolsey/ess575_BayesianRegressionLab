@@ -651,4 +651,25 @@ Such that:
 $$
 \big[\beta_0, \cdots, \beta_p \mid y \big] \propto \prod_{i = 1}^{n} {\sf Poisson} \bigl( y_{i} \mid \lambda_i \bigr) \times{\sf beta}(\beta_0 \mid 0.001, 0.001) \times \cdots \times {\sf beta}(\beta_p \mid 0.001, 0.001)
 $$
+## JAGS Model
+
+```{r, eval=FALSE}
+model {
+   # PRIORS, p = number of coefficients, including intercept
+    for(i in 1:p) {  
+      beta[i] ~ dnorm(0, 0.01)
+    }
+  # LIKELIHOOD
+    # n = number of states (rows in X)
+    # y = number of birds in each state
+    # X is a n x p matrix with 1s in column 1
+    
+    for(i in 1:n)   { 
+      z[i] <- x[i,] %*% beta # the regression model, returns a vector 
+    #of length n
+      y[i] ~ dpois(lambda[i])
+      lambda[i] <- exp(z[i])
+    }
+}
+```
 
