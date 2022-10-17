@@ -447,7 +447,7 @@ jm = rjags::jags.model(
   , n.chains = length(inits)
   , n.adapt = n.adapt
 )
-stats::update(jm, n.iter = n.update)
+stats::update(jm, n.iter = n.update, progress.bar = "none")
 # save the coda object (more precisely, an mcmc.list object) to R as "zm"
 zm = rjags::coda.samples(
   model = jm
@@ -459,19 +459,21 @@ zm = rjags::coda.samples(
       , "b3"
       , "b4"
       , "mean_y"
-      # , "sd_y"
+      , "sd_y"
       , "mean_y_sim"
-      # , "sd_y_sim"
+      , "sd_y_sim"
       , "p_val_mean"
       , "p_val_sd"
     )
   , n.iter = n.iter
   , n.thin = 1
+  , progress.bar = "none"
 )
 #####################
 # check output
 #####################
 # summary
+MCMCvis::MCMCsummary(zm, params = c("b4"))[[1]]
 MCMCvis::MCMCsummary(zm, params = c(
       "sigma"
       , "b0"
@@ -480,9 +482,9 @@ MCMCvis::MCMCsummary(zm, params = c(
       , "b3"
       , "b4"
       , "mean_y"
-      # , "sd_y"
+      , "sd_y"
       , "mean_y_sim"
-      # , "sd_y_sim"
+      , "sd_y_sim"
       , "p_val_mean"
       , "p_val_sd"
     )
@@ -495,15 +497,7 @@ zm[[1]][1:6, c(
       , "b3"
       , "b4"
     )]
-# plot
-MCMCvis::MCMCplot(zm, params = c(
-      "b0"
-      , "b1"
-      , "b2"
-      , "b3"
-      , "b4"
-    ))
-# trace
+# trace plot
 MCMCvis::MCMCtrace(zm, params = c(
       "b0"
       , "b1"
@@ -513,8 +507,22 @@ MCMCvis::MCMCtrace(zm, params = c(
     )
     , pdf = FALSE
   )
-
+# Caterpillar plots
+MCMCvis::MCMCplot(zm, params = c(
+      "b0"
+      , "b1"
+      , "b2"
+      , "b3"
+      , "b4"
+    ))
+exp_vars <- c("slope", "aspect", "slope_position", "rel_moisture")
 ```
+
+Which covariate has the greatest effect?
+
+\textcolor{violet}{The covariate with the greatest effect is relative moisture ($\beta_4 = $ `r MCMCvis::MCMCsummary(zm, params = c("b4"))[[1]] %>% scales::comma(accuracy = 0.001)`). Relative effect can be inferred by the absolute value of the coefficient estimates because the predictor data was standardized.}
+
+### Posterior predictive check summary
 
 Do a posterior predictive check for the mean and the standard deviation.
 
@@ -522,14 +530,96 @@ Do a posterior predictive check for the mean and the standard deviation.
 # summary
 MCMCvis::MCMCsummary(zm, params = c(
       "mean_y"
-      # , "sd_y"
       , "mean_y_sim"
-      # , "sd_y_sim"
       , "p_val_mean"
+      , "sd_y"
+      , "sd_y_sim"
       , "p_val_sd"
     )
   )
-# PLOT
-
 ```
+
+### Posterior predictive check - mean
+
+```{r}
+# PLOT
+MCMCvis::MCMCchains(zm, params = c("mean_y", "mean_y_sim")) %>%
+  data.frame() %>%
+ggplot(data = .) +
+  geom_abline(intercept = 0, slope = 1, lwd = 1, color = "gray20") +
+  geom_point(
+    mapping  = aes(x = mean_y, y = mean_y_sim)
+    , color = "navy"
+    , alpha = 0.2
+  ) +
+  scale_y_continuous(
+    limits = c(
+      min(coverage$coverage)*.95
+      , max(coverage$coverage)*1.05
+    ) 
+    , breaks = scales::extended_breaks(n=10)
+  ) +
+  scale_x_continuous(
+    limits = c(
+      min(coverage$coverage)*.95
+      , max(coverage$coverage)*1.05
+    ) 
+    , breaks = scales::extended_breaks(n=10)
+  ) +
+  xlab("Mean Observed Coverage") +
+  ylab("Mean Simulated Coverage") +
+  labs(
+    title = "Observed vs. Simulated Coverage - Mean"
+    , subtitle = paste0(
+        "*Bayesian P value = "
+        , MCMCvis::MCMCchains(zm, params = c("p_val_mean")) %>% mean() %>% scales::comma(accuracy = 0.01)
+      )
+  ) +
+  theme_bw()
+  
+```
+
+\textcolor{violet}{The Bayesian p-value of `r MCMCvis::MCMCchains(zm, params = c("p_val_mean")) %>% mean() %>% scales::comma(accuracy = 0.01)` indicates good fit for the mean grass coverage level. If the p-value were very large or very small (i.e., close to 1 or 0), it would indicate lack of fit.}
+
+### Posterior predictive check - SD
+
+```{r}
+# PLOT
+MCMCvis::MCMCchains(zm, params = c("sd_y", "sd_y_sim")) %>%
+  data.frame() %>%
+ggplot(data = .) +
+  geom_abline(intercept = 0, slope = 1, lwd = 1, color = "gray20") +
+  geom_point(
+    mapping  = aes(x = sd_y, y = sd_y_sim)
+    , color = "steelblue"
+    , alpha = 0.2
+  ) +
+  scale_y_continuous(
+    limits = c(
+      min(coverage$coverage)*.95
+      , max(coverage$coverage)*1.05
+    ) 
+    , breaks = scales::extended_breaks(n=10)
+  ) +
+  scale_x_continuous(
+    limits = c(
+      min(coverage$coverage)*.95
+      , max(coverage$coverage)*1.05
+    ) 
+    , breaks = scales::extended_breaks(n=10)
+  ) +
+  xlab("St. Dev. Observed Coverage") +
+  ylab("St. Dev. Simulated Coverage") +
+  labs(
+    title = "Observed vs. Simulated Coverage - St. Dev."
+    , subtitle = paste0(
+        "*Bayesian P value = "
+        , MCMCvis::MCMCchains(zm, params = c("p_val_sd")) %>% mean() %>% scales::comma(accuracy = 0.01)
+      )
+  ) +
+  theme_bw()
+  
+```
+
+\textcolor{violet}{The Bayesian p-value of `r MCMCvis::MCMCchains(zm, params = c("p_val_sd")) %>% mean() %>% scales::comma(accuracy = 0.01)` indicates good fit for the standard deviaion of grass coverage. If the p-value were very large or very small (i.e., close to 1 or 0), it would indicate lack of fit.}
 
