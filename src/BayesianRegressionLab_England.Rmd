@@ -320,13 +320,21 @@ model{
       y_sim[i]  ~ dbeta(a[i], b[i]) 
   }
   # Derived quantities
-  #posterior predictive checks
-    mean_y = mean(y)
-    sd_y = sd(y)
-    mean_y_sim = mean(y_sim)
-    sd_y_sim = sd(y_sim)
-    p_val_mean = step(mean_y_sim - mean_y)
-    p_val_sd = step(sd_y_sim - sd_y)
+    #posterior predictive checks
+      mean_y = mean(y)
+      sd_y = sd(y)
+      mean_y_sim = mean(y_sim)
+      sd_y_sim = sd(y_sim)
+      p_val_mean = step(mean_y_sim - mean_y)
+      p_val_sd = step(sd_y_sim - sd_y)
+    # sum of squares 
+      for(j in 1:n) {
+        sq[j] <- (y[j]-mu[j])^2
+        sq_sim[j] <- (y_sim[j]-mu[j])^2
+      }
+      fit_y <- sum(sq)
+      fit_y_sim <- sum(sq_sim)
+      p_val_fit = step(fit_y_sim - fit_y)
 }
 ```
 
@@ -352,8 +360,8 @@ model{
       # deterministic model
       mu[i] <- ilogit(
          b0
-         + b1*x_mtrx[i,2]
-         + b2*x_mtrx[i,3]                   
+         + b1*x_mtrx[i,2] 
+         + b2*x_mtrx[i,3] 
          + b3*x_mtrx[i,4]
          + b4*x_mtrx[i,5]
       )
@@ -361,20 +369,25 @@ model{
       a[i] <- (mu[i]^2 - mu[i]^3 - mu[i]*sigma^2) / sigma^2
       b[i] <- (mu[i] - 2*mu[i]^2 + mu[i]^3 - sigma^2 + mu[i]*sigma^2) / sigma^2
       # likelihood
-        # returns density (for continuous) because l.h.s. is data (deterministic b/c defined in data) 
         y[i] ~ dbeta(a[i], b[i]) 
-      # posterior predictive distribution of y.new (for model checking)
-        # returns random number generator because l.h.s. is not data (i.e. it is unknown/stochastic node)
         y_sim[i]  ~ dbeta(a[i], b[i]) 
     }
     # Derived quantities
-    #posterior predictive checks
-      mean_y = mean(y)
-      sd_y = sd(y)
-      mean_y_sim = mean(y_sim)
-      sd_y_sim = sd(y_sim)
-      p_val_mean = step(mean_y_sim - mean_y)
-      p_val_sd = step(sd_y_sim - sd_y)
+      #posterior predictive checks
+        mean_y = mean(y)
+        sd_y = sd(y)
+        mean_y_sim = mean(y_sim)
+        sd_y_sim = sd(y_sim)
+        p_val_mean = step(mean_y_sim - mean_y)
+        p_val_sd = step(sd_y_sim - sd_y)
+      # sum of squares 
+        for(j in 1:n) {
+          sq[j] <- (y[j]-mu[j])^2
+          sq_sim[j] <- (y_sim[j]-mu[j])^2
+        }
+        fit_y <- sum(sq)
+        fit_y_sim <- sum(sq_sim)
+        p_val_fit = step(fit_y_sim - fit_y)
   }
   ", fill = TRUE)
   sink()
@@ -464,6 +477,9 @@ zm = rjags::coda.samples(
       , "sd_y_sim"
       , "p_val_mean"
       , "p_val_sd"
+      , "fit_y"
+      , "fit_y_sim"
+      , "p_val_fit"
     )
   , n.iter = n.iter
   , n.thin = 1
@@ -482,11 +498,14 @@ MCMCvis::MCMCsummary(zm, params = c(
       , "b3"
       , "b4"
       , "mean_y"
-      , "sd_y"
       , "mean_y_sim"
-      , "sd_y_sim"
       , "p_val_mean"
+      , "sd_y"
+      , "sd_y_sim"
       , "p_val_sd"
+      , "fit_y"
+      , "fit_y_sim"
+      , "p_val_fit"
     )
   )
 # chain 1 first 6 iterations and specific columns
@@ -535,6 +554,9 @@ MCMCvis::MCMCsummary(zm, params = c(
       , "sd_y"
       , "sd_y_sim"
       , "p_val_sd"
+      , "fit_y"
+      , "fit_y_sim"
+      , "p_val_fit"
     )
   )
 ```
@@ -622,6 +644,48 @@ ggplot(data = .) +
 ```
 
 \textcolor{violet}{The Bayesian p-value of `r MCMCvis::MCMCchains(zm, params = c("p_val_sd")) %>% mean() %>% scales::comma(accuracy = 0.01)` indicates good fit for the standard deviaion of grass coverage. If the p-value were very large or very small (i.e., close to 1 or 0), it would indicate lack of fit.}
+
+### Posterior predictive check - Sum of Squared Errors
+
+```{r}
+# PLOT
+MCMCvis::MCMCchains(zm, params = c("fit_y", "fit_y_sim")) %>%
+  data.frame() %>%
+ggplot(data = .) +
+  geom_abline(intercept = 0, slope = 1, lwd = 1, color = "gray20") +
+  geom_point(
+    mapping  = aes(x = fit_y, y = fit_y_sim)
+    , color = "gray60"
+    , alpha = 0.2
+  ) +
+  scale_y_continuous(
+    limits = c(
+      0
+      , 1
+    ) 
+    , breaks = scales::extended_breaks(n=10)
+  ) +
+  scale_x_continuous(
+    limits = c(
+      0
+      , 1
+    ) 
+    , breaks = scales::extended_breaks(n=10)
+  ) +
+  xlab("SSE Observed Coverage") +
+  ylab("SSE Simulated Coverage") +
+  labs(
+    title = "Observed vs. Simulated Coverage - Sum of Squared Errors"
+    , subtitle = paste0(
+        "*Bayesian P value = "
+        , MCMCvis::MCMCchains(zm, params = c("p_val_fit")) %>% mean() %>% scales::comma(accuracy = 0.01)
+      )
+  ) +
+  theme_bw()
+  
+```
+
+
 
 ## Problem C
 
